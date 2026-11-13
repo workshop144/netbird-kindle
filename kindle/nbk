@@ -7,6 +7,8 @@
 #   nbk status    say what is running and whether the link answers
 #   nbk toggle    start if down, stop if up
 #   nbk check     check the settings and change nothing
+#   nbk import    take in settings and a setup key left in the netbird-kindle folder on the
+#                 Kindle's storage (start, restart and toggle do this first by themselves)
 #
 # The Kindle's kernel has no TUN driver, so NetBird cannot make a network interface. It runs
 # in "netstack" mode instead and offers a SOCKS5 proxy on localhost. Readers such as KOReader
@@ -17,27 +19,36 @@
 # of their own and the hosts overlay is a bind mount; `nbk stop` or a reboot removes both.
 
 set -f # no file name expansion anywhere: settings are split into words, never globbed
+LC_ALL=C; export LC_ALL # bytes, not characters: the checks below mean exactly what they say
 
 DIR=$(cd "$(dirname "$0")" && pwd -P)
 CONF="$DIR/netbird-kindle.conf"
 RUN=/var/run/netbird-kindle
 KEYFILE="$DIR/setup-key"
+DROP=/mnt/us/netbird-kindle
 NAT_CHAIN=NBK
 IN_CHAIN=NBK-IN
 LOG_MAX=262144
 WAIT_SECONDS=60
 
-# The config is a shell file read by root: keep it root-owned and out of /mnt/us.
-# `nbk stop` works without one, so a half-removed install can still be cleaned up.
-if [ -r "$CONF" ]; then
+# The settings are a shell file read by root. They live beside this script, out of /mnt/us.
+defaults() {
+    : "${PEER_NAME:=kindle}" "${SOCKS_PORT:=1080}" "${FIRST_LOCAL_PORT:=14431}"
+    : "${FORWARDS:=}" "${HOSTS:=}" "${MANAGEMENT_URL:=}"
+}
+
+settings() {
+    [ -r "$CONF" ] || return 1
     # shellcheck disable=SC1090
     . "$CONF"
-elif [ "${1:-}" != stop ]; then
-    echo "nbk: no $CONF (copy netbird-kindle.conf.example and edit it)"
+    defaults
+}
+
+need_settings() {
+    settings && return 0
+    echo "nbk: no settings yet. Put netbird-kindle.conf in the netbird-kindle folder on the Kindle's storage."
     exit 2
-fi
-: "${PEER_NAME:=kindle}" "${SOCKS_PORT:=1080}" "${FIRST_LOCAL_PORT:=14431}"
-: "${FORWARDS:=}" "${HOSTS:=}" "${MANAGEMENT_URL:=}"
+}
 
 # --- settings are checked before anything is started ---------------------------------------
 
@@ -98,6 +109,56 @@ validate() {
                 printf '%s\n' "$name" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$' || { echo bad; break; }
             done
         done | grep -q bad && { echo "nbk: HOSTS entries must be 'IP name [name ...]' separated by ';'"; return 1; }
+    fi
+    return 0
+}
+
+# --- settings left on the Kindle's storage -----------------------------------------------------
+
+# The folder a computer sees over USB is the only way in for someone without a root shell, and
+# anything can write there. So a settings file from it is never run as shell: every line must
+# be a comment or one known setting with a plain value, the result must pass the same checks
+# as always, and only then does a fresh copy replace the settings in use.
+SETTING='(MANAGEMENT_URL|PEER_NAME|FORWARDS|HOSTS|SOCKS_PORT|FIRST_LOCAL_PORT)'
+PLAIN_LINE="^${SETTING}=(\"[A-Za-z0-9 .:;/_~-]*\"|[A-Za-z0-9.:/_-]*)[[:space:]]*\$"
+
+# first FOLDER NAME: print the file called NAME or NAME.txt (editors add the ending unasked).
+first() {
+    for candidate in "$1/$2" "$1/$2.txt"; do
+        [ -f "$candidate" ] && { echo "$candidate"; return 0; }
+    done
+    return 1
+}
+
+# Sets TOOK when something was taken in. Fails, changing nothing, when a file is refused.
+import() {
+    TOOK=""
+    if dropped=$(first "$DROP" netbird-kindle.conf); then
+        new="$CONF.new"
+        text() { tr -d '\r\357\273\277' < "$dropped"; }
+        line=$(text | grep -Evn -e '^[[:space:]]*(#.*)?$' -e "$PLAIN_LINE" | head -n 1 | cut -d: -f1)
+        if [ -n "$line" ]; then
+            echo "nbk: settings file, line $line: not a setting I know. Nothing changed."
+            return 1
+        fi
+        ( umask 077; text | grep -E "$PLAIN_LINE" | sed 's/[[:space:]]*$//' > "$new" ) || { rm -f "$new"; return 1; }
+        # shellcheck disable=SC1090
+        if ! why=$(. "$new" && defaults && validate); then
+            rm -f "$new"
+            # the reason goes last: the home-screen item shows only the last line
+            echo "nbk: the settings file was not taken. Nothing changed."
+            echo "$why"
+            return 1
+        fi
+        mv "$new" "$CONF" && rm -f "$dropped" || { rm -f "$new"; echo "nbk: could not store the settings"; return 1; }
+        echo "nbk: took the new settings"
+        TOOK=yes
+    fi
+    if dropped=$(first "$DROP" setup-key) && [ -s "$dropped" ]; then
+        ( umask 077; tr -d ' \t\r\n' < "$dropped" > "$KEYFILE" ) && rm -f "$dropped" ||
+            { echo "nbk: could not store the setup key"; return 1; }
+        echo "nbk: took the setup key"
+        TOOK=yes
     fi
     return 0
 }
@@ -249,7 +310,7 @@ start() {
     fi
     down
     if [ ! -s "$DIR/state/config.json" ] && [ ! -s "$KEYFILE" ]; then
-        echo "nbk: not enrolled yet. Put a NetBird setup key in $KEYFILE and start again."
+        echo "nbk: not enrolled yet. Put a file called setup-key in the netbird-kindle folder on the Kindle's storage."
         return 2
     fi
 
@@ -327,11 +388,17 @@ status() {
 }
 
 case "${1:-status}" in
-    start) lock; start ;;
-    stop) lock; stop ;;
-    restart) lock; down; start ;;
-    status) status ;;
-    toggle) lock; if alive netbird; then stop; else start; fi ;;
-    check) validate && echo "nbk: settings look right" ;;
-    *) echo "usage: nbk start|stop|restart|status|toggle|check"; exit 2 ;;
+    start) lock; import || exit 2; need_settings; [ -n "$TOOK" ] && down; start ;;
+    # `nbk stop` works without settings, so a half-removed install can still be cleaned up
+    stop) lock; settings; stop ;;
+    restart) lock; import || exit 2; need_settings; down; start ;;
+    status) need_settings; status ;;
+    toggle)
+        lock; import || exit 2; need_settings
+        # new settings or a new key mean "use them", whatever the link was doing
+        if [ -n "$TOOK" ]; then down; start; elif alive netbird; then stop; else start; fi
+        ;;
+    check) need_settings; validate && echo "nbk: settings look right" ;;
+    import) lock; import || exit 2; [ -n "$TOOK" ] || echo "nbk: nothing to take in from $DROP" ;;
+    *) echo "usage: nbk start|stop|restart|status|toggle|check|import"; exit 2 ;;
 esac

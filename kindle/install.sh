@@ -6,13 +6,15 @@
 #
 # It downloads the NetBird client named in ./versions from NetBird's GitHub releases, checks
 # its SHA-256 against the value pinned there, and puts everything in /var/local/netbird-kindle.
-# Your settings and the device's NetBird identity are kept when updating.
+# Your settings and the device's NetBird identity are kept when updating, and a link that was
+# up is brought back up afterwards.
 
 set -u
 SRC=$(cd "$(dirname "$0")" && pwd)
 DEST=/var/local/netbird-kindle
 KOREADER=/mnt/us/koreader
 DOCS=/mnt/us/documents
+DROP=/mnt/us/netbird-kindle
 hook=yes
 [ "${1:-}" = "--no-koreader" ] && hook=no
 
@@ -51,7 +53,9 @@ mkdir -p "$DEST" || die "cannot create $DEST"
 chmod 700 "$DEST"
 
 # stop a running link before replacing what it runs
+was_up=no
 if [ -x "$DEST/nbk" ]; then
+    "$DEST/nbk" status 2> /dev/null | grep -q '^netbird: running' && was_up=yes
     "$DEST/nbk" stop > /dev/null 2>&1 || die "could not stop the running link; stop it and run this again"
 fi
 
@@ -86,11 +90,13 @@ cp "$SRC/$link" "$DEST/nblink" && cp "$SRC/nbk" "$DEST/nbk" && cp "$SRC/uninstal
     die "could not copy nbk, nblink and uninstall.sh"
 [ -r "$SRC/VERSION" ] && cp "$SRC/VERSION" "$DEST/VERSION"
 cp "$SRC/netbird-kindle.conf.example" "$DEST/netbird-kindle.conf.example"
-if [ ! -e "$DEST/netbird-kindle.conf" ]; then
-    cp "$SRC/netbird-kindle.conf.example" "$DEST/netbird-kindle.conf"
-    echo "install: wrote $DEST/netbird-kindle.conf from the example: edit it before starting"
+[ -e "$DEST/netbird-kindle.conf" ] && chmod 600 "$DEST/netbird-kindle.conf"
+
+# The folder a computer sees over USB is where settings and the setup key are handed over.
+# nbk takes them in from there and removes them; see `nbk import`.
+if [ -d /mnt/us ]; then
+    mkdir -p "$DROP" && [ "$SRC" != "$DROP" ] && cp "$SRC/netbird-kindle.conf.example" "$DROP/"
 fi
-chmod 600 "$DEST/netbird-kindle.conf"
 
 # A setup key left beside this script (on USB-visible storage) is moved to where only root on
 # the device can read it.
@@ -109,4 +115,15 @@ if [ "$hook" = yes ] && [ -d "$KOREADER" ]; then
         echo "install: KOReader will bring the link up when it starts (restart KOReader once)"
 fi
 
-echo "install: done. Next: edit $DEST/netbird-kindle.conf, then run $DEST/nbk start"
+if [ "$was_up" = yes ]; then
+    echo "install: bringing the link back up"
+    "$DEST/nbk" start
+    echo "install: done"
+elif [ -e "$DEST/netbird-kindle.conf" ]; then
+    echo "install: done. Tap 'NetBird link' on the home screen to start."
+else
+    echo "install: done. Next, from a computer: in the netbird-kindle folder on the Kindle, copy"
+    echo "         netbird-kindle.conf.example to netbird-kindle.conf and edit it, and save your"
+    echo "         setup key in a file called setup-key. Then tap 'NetBird link'."
+fi
+exit 0
