@@ -66,6 +66,44 @@ check "setup key: removed from the visible folder" '[ ! -e "$WORK/drop/setup-key
 check "setup key: private to root" '[ "$(ls -l "$WORK/nbk/setup-key" | cut -c1-10)" = "-rw-------" ]'
 
 fresh
+good_conf > "$CONF"; cp "$CONF" "$WORK/before"
+{ good_conf; printf 'PEER_NAME="a"\000; touch %s/pwned\n' "$WORK"; } > "$DROPPED"
+out=$("$NBK" import 2>&1); rc=$?
+check "a line hiding behind a NUL byte: refused" '[ $rc -ne 0 ] && [ ! -e "$WORK/pwned" ] && cmp -s "$CONF" "$WORK/before"'
+
+for wrong in 'FORWARDS="010.020.030.040:443"' 'FORWARDS="10.20.30.40:443"|HOSTS="10.20.30.08 library.example"'; do
+    fresh
+    printf '%s\n' "$wrong" | tr '|' '\n' > "$DROPPED"
+    out=$("$NBK" import 2>&1); rc=$?
+    check "addresses written with leading zeros: refused ($wrong)" '[ $rc -ne 0 ] && [ ! -e "$CONF" ]'
+done
+
+fresh
+good_conf > "$CONF"; echo "old-key" > "$WORK/nbk/setup-key"
+printf ' \r\n' > "$WORK/drop/setup-key"
+out=$("$NBK" import 2>&1); rc=$?
+check "an empty setup key does not replace a stored one" '[ "$(cat "$WORK/nbk/setup-key")" = "old-key" ] && ! echo "$out" | grep -q "took the setup key"'
+
+fresh
+printf 'nonsense\n' > "$DROPPED"; echo "KEY-1" > "$WORK/drop/setup-key"
+out=$("$NBK" import 2>&1); rc=$?
+check "refused settings do not leave the setup key in the visible folder" '[ $rc -ne 0 ] && [ "$(cat "$WORK/nbk/setup-key")" = "KEY-1" ] && [ ! -e "$WORK/drop/setup-key" ]'
+
+fresh
+good_conf > "$CONF"
+printf 'nonsense\n' > "$DROPPED"
+out=$("$NBK" start 2>&1); rc=$?
+check "refused settings do not stop the old ones being used" 'echo "$out" | grep -q "not enrolled yet"'
+check "the refusal is the last thing said, and the run fails" '[ $rc -ne 0 ] && echo "$out" | tail -n 1 | grep -q "line 1"'
+out=$("$NBK" stop 2>&1); rc=$?
+check "stop still works with a refused file waiting" '[ $rc -eq 0 ] && echo "$out" | grep -q "nbk: down"'
+
+fresh
+printf 'this is not shell {\n' > "$CONF"
+out=$("$NBK" stop 2>&1); rc=$?
+check "stop does not read the settings at all" '[ $rc -eq 0 ] && echo "$out" | grep -q "nbk: down"'
+
+fresh
 if out=$("$NBK" check 2>&1); then rc=0; else rc=$?; fi
 check "no settings at all: check says where to put them" '[ $rc -ne 0 ] && echo "$out" | grep -q "netbird-kindle folder"'
 

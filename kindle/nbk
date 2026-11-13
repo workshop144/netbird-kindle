@@ -46,6 +46,7 @@ settings() {
 
 need_settings() {
     settings && return 0
+    [ -n "${REFUSED:-}" ] && { echo "$REFUSED"; exit 2; }
     echo "nbk: no settings yet. Put netbird-kindle.conf in the netbird-kindle folder on the Kindle's storage."
     exit 2
 }
@@ -60,7 +61,8 @@ is_port() {
 
 # A plain IPv4 address that is not loopback, unspecified or a network.
 is_address() {
-    printf '%s\n' "$1" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 1
+    # no leading zeros: some programs would read 010 as eight
+    printf '%s\n' "$1" | grep -Eq '^((0|[1-9][0-9]{0,2})\.){3}(0|[1-9][0-9]{0,2})$' || return 1
     old_ifs=$IFS; IFS=.
     # shellcheck disable=SC2086
     set -- $1
@@ -130,37 +132,47 @@ first() {
     return 1
 }
 
-# Sets TOOK when something was taken in. Fails, changing nothing, when a file is refused.
+# Sets TOOK when something was taken in. A settings file that is refused is left where it is,
+# changes nothing, and sets REFUSED to the reason: the caller carries on with the settings it
+# had and says the reason last, where the home-screen item shows it.
 import() {
     TOOK=""
+    REFUSED=""
     if dropped=$(first "$DROP" netbird-kindle.conf); then
         new="$CONF.new"
-        text() { tr -d '\r\357\273\277' < "$dropped"; }
+        text() { tr -d '\000\r\357\273\277' < "$dropped"; }
         line=$(text | grep -Evn -e '^[[:space:]]*(#.*)?$' -e "$PLAIN_LINE" | head -n 1 | cut -d: -f1)
-        if [ -n "$line" ]; then
-            echo "nbk: settings file, line $line: not a setting I know. Nothing changed."
-            return 1
-        fi
-        ( umask 077; text | grep -E "$PLAIN_LINE" | sed 's/[[:space:]]*$//' > "$new" ) || { rm -f "$new"; return 1; }
         # shellcheck disable=SC1090
-        if ! why=$(. "$new" && defaults && validate); then
-            rm -f "$new"
-            # the reason goes last: the home-screen item shows only the last line
-            echo "nbk: the settings file was not taken. Nothing changed."
-            echo "$why"
-            return 1
+        if [ -n "$line" ]; then
+            REFUSED="nbk: settings file, line $line: not a setting I know. Nothing changed."
+        elif ! ( umask 077; text | grep -E "$PLAIN_LINE" | sed 's/[[:space:]]*$//' > "$new" ); then
+            REFUSED="nbk: could not read the settings file. Nothing changed."
+        elif ! why=$(. "$new" && defaults && validate); then
+            REFUSED="settings file not taken. $why"
+        elif ! mv "$new" "$CONF"; then
+            REFUSED="nbk: could not store the settings. Nothing changed."
+        else
+            rm -f "$dropped" || echo "nbk: could not remove $dropped: delete it yourself"
+            echo "nbk: took the new settings"
+            TOOK=yes
         fi
-        mv "$new" "$CONF" && rm -f "$dropped" || { rm -f "$new"; echo "nbk: could not store the settings"; return 1; }
-        echo "nbk: took the new settings"
-        TOOK=yes
+        rm -f "$new"
     fi
-    if dropped=$(first "$DROP" setup-key) && [ -s "$dropped" ]; then
-        ( umask 077; tr -d ' \t\r\n' < "$dropped" > "$KEYFILE" ) && rm -f "$dropped" ||
-            { echo "nbk: could not store the setup key"; return 1; }
-        echo "nbk: took the setup key"
-        TOOK=yes
+    if dropped=$(first "$DROP" setup-key); then
+        # an empty file is a slip, not a key: it must not wipe one already stored
+        if ( umask 077; tr -d ' \t\r\n\000' < "$dropped" > "$KEYFILE.new" ) && [ -s "$KEYFILE.new" ]; then
+            mv "$KEYFILE.new" "$KEYFILE" && echo "nbk: took the setup key" && TOOK=yes
+        fi
+        rm -f "$KEYFILE.new" "$dropped"
     fi
     return 0
+}
+
+# Say why a settings file was refused, last of all, and fail.
+refusal() {
+    [ -n "$REFUSED" ] || return 0
+    echo "$REFUSED"
+    exit 2
 }
 
 # --- processes ------------------------------------------------------------------------------
@@ -388,17 +400,26 @@ status() {
 }
 
 case "${1:-status}" in
-    start) lock; import || exit 2; need_settings; [ -n "$TOOK" ] && down; start ;;
-    # `nbk stop` works without settings, so a half-removed install can still be cleaned up
-    stop) lock; settings; stop ;;
-    restart) lock; import || exit 2; need_settings; down; start ;;
+    start) lock; import; need_settings; [ -n "$TOOK" ] && down; start; rc=$?; refusal; exit $rc ;;
+    # stop reads no settings, so a half-removed or broken install can still be cleaned up
+    stop) lock; stop ;;
+    restart) lock; import; need_settings; down; start; rc=$?; refusal; exit $rc ;;
     status) need_settings; status ;;
     toggle)
-        lock; import || exit 2; need_settings
+        lock; import; need_settings
         # new settings or a new key mean "use them", whatever the link was doing
         if [ -n "$TOOK" ]; then down; start; elif alive netbird; then stop; else start; fi
+        rc=$?; refusal; exit $rc
         ;;
     check) need_settings; validate && echo "nbk: settings look right" ;;
-    import) lock; import || exit 2; [ -n "$TOOK" ] || echo "nbk: nothing to take in from $DROP" ;;
+    import)
+        lock; import
+        if [ -z "$TOOK$REFUSED" ]; then
+            echo "nbk: nothing to take in from $DROP"
+        elif [ -n "$TOOK" ] && alive netbird; then
+            echo "nbk: the link is still running as before: 'nbk restart' to use what was taken in"
+        fi
+        refusal
+        ;;
     *) echo "usage: nbk start|stop|restart|status|toggle|check|import"; exit 2 ;;
 esac

@@ -71,7 +71,7 @@ The 64-bit ARM build is there but has not been run on a device. If you try this 
 
 3. Eject, and tap "NetBird link" on the home screen.
 
-The tap checks your settings, moves both files off the storage a computer can see, and starts the link. If there is a mistake in the settings it says which line, leaves the file where it is, and changes nothing. To change settings later, do step 2 again with just the settings file.
+The tap checks your settings, moves both files off the storage a computer can see, and starts the link. If there is a mistake in the settings it says what is wrong, leaves the file where it is, and carries on with the settings it had. To change settings later, do step 2 again with just the settings file.
 
 To update, run `;kpm update` and then `;kpm install netbird-kindle` again. Your settings and the Kindle's NetBird identity are kept, and a link that was up comes back up.
 

@@ -18,7 +18,14 @@ DROP=/mnt/us/netbird-kindle
 hook=yes
 [ "${1:-}" = "--no-koreader" ] && hook=no
 
-die() { echo "install: $*" >&2; exit 1; }
+# A link this script stopped is started again if the install cannot go on: what it was running
+# is still in place.
+was_up=no
+die() {
+    echo "install: $*" >&2
+    [ "$was_up" = yes ] && "$DEST/nbk" start > /dev/null 2>&1 && echo "install: the link is back up as it was" >&2
+    exit 1
+}
 
 [ "$(id -u)" = 0 ] || die "run this as root on the Kindle"
 [ -r "$SRC/versions" ] || die "no versions file beside this script"
@@ -53,7 +60,6 @@ mkdir -p "$DEST" || die "cannot create $DEST"
 chmod 700 "$DEST"
 
 # stop a running link before replacing what it runs
-was_up=no
 if [ -x "$DEST/nbk" ]; then
     "$DEST/nbk" status 2> /dev/null | grep -q '^netbird: running' && was_up=yes
     "$DEST/nbk" stop > /dev/null 2>&1 || die "could not stop the running link; stop it and run this again"
