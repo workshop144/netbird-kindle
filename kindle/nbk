@@ -18,6 +18,18 @@
 # Nothing on the read-only system partition is written. The firewall rules sit in two chains
 # of their own and the hosts overlay is a bind mount; `nbk stop` or a reboot removes both.
 
+# Whatever started this script (KOReader's start hook, the home-screen launcher) hands down its
+# own open pipes and sockets. The long-running programs started below would hold them for as
+# long as they live, and the Kindle's app launcher waits on some of them. Close them first.
+for f in /proc/$$/fd/*; do
+    n=${f##*/}
+    case "$n" in *[!0-9]*) continue ;; esac
+    [ "$n" -gt 2 ] || continue
+    case "$(readlink "$f" 2>/dev/null)" in
+        pipe:* | socket:* | anon_inode:* | /dev/* | /var/run/*) eval "exec $n>&-" 2>/dev/null ;;
+    esac
+done
+
 set -f # no file name expansion anywhere: settings are split into words, never globbed
 LC_ALL=C; export LC_ALL # bytes, not characters: the checks below mean exactly what they say
 
