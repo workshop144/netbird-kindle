@@ -38,6 +38,7 @@ The pieces:
 - `nbk`, a shell script that starts and stops the lot, and checks that the link really answers before it says "up".
 - `nblink`, a small Go program with no dependencies that carries connections from a local port through the SOCKS5 proxy.
 - A home-screen item that toggles the link, and an optional hook that brings it up whenever KOReader starts.
+- A [KPM](https://kindlemodding.org/jailbreaking/whats-next/installing-homebrew.html#kpm) package, so the whole thing installs from the Kindle's search bar.
 
 ## Tested on
 
@@ -47,35 +48,50 @@ The 64-bit ARM build is there but has not been run on a device. If you try this 
 
 ## What you need
 
-- A jailbroken Kindle and a root shell on it. KOReader's SSH server (Network menu) is the easy way.
+- A jailbroken Kindle with KPM, the package manager current jailbreaks install. Without KPM you need a root shell instead; see [Installing without KPM](#installing-without-kpm).
 - Wi-Fi on while installing, and about 120 MB free in `/var/local`.
 - A NetBird account or your own server, and a setup key for the Kindle. Make it a one-off key with a short expiry.
 - On the NetBird side, a route to whatever the Kindle should reach and an access policy that allows it.
 
 ## Install
 
+1. On the Kindle, with Wi-Fi on, type these into the search bar, one at a time:
+
+   ```
+   ;kpm add-repo https://github.com/workshop144/netbird-kindle/releases/latest/download/repo.json
+   ;kpm install netbird-kindle
+   ```
+
+   The second one downloads the NetBird client (about 15 MB) straight from NetBird's GitHub releases and checks it against a pinned SHA-256. If the checksum does not match, nothing is installed. It adds a "NetBird link" item to the home screen and, if KOReader is installed, a hook that brings the link up when KOReader starts.
+
+2. Plug the Kindle into a computer. There is now a `netbird-kindle` folder at the top level of its storage. In it:
+
+   - copy `netbird-kindle.conf.example` to `netbird-kindle.conf` and edit it (see [Settings](#settings));
+   - save your setup key in a file called `setup-key`.
+
+3. Eject, and tap "NetBird link" on the home screen.
+
+The tap checks your settings, moves both files off the storage a computer can see, and starts the link. If there is a mistake in the settings it says what is wrong, leaves the file where it is, and carries on with the settings it had. To change settings later, do step 2 again with just the settings file.
+
+To update, run `;kpm update` and then `;kpm install netbird-kindle` again. Your settings and the Kindle's NetBird identity are kept, and a link that was up comes back up.
+
+### Installing without KPM
+
+This needs a root shell on the Kindle. KOReader's SSH server (Network menu) is the easy way.
+
 1. Download `netbird-kindle.zip` from the [releases page](https://github.com/workshop144/netbird-kindle/releases) and unzip it. `SHA256SUMS` beside it lets you check the download.
 2. Plug the Kindle in and copy the `netbird-kindle` folder to the top level of its storage.
-3. Save your setup key in a file called `setup-key` inside that folder.
+3. In that folder, copy `netbird-kindle.conf.example` to `netbird-kindle.conf` and edit it, and save your setup key in a file called `setup-key`.
 4. Eject, then on the Kindle, as root:
 
    ```
    sh /mnt/us/netbird-kindle/install.sh
-   ```
-
-   This downloads the NetBird client (about 15 MB) straight from NetBird's GitHub releases, checks it against the SHA-256 pinned in `versions`, and installs everything under `/var/local/netbird-kindle`. It moves the setup key off the USB-visible storage. If the checksum does not match, nothing is installed.
-
-   It also adds a "NetBird link" item to the home screen and, if KOReader is installed, a hook that brings the link up when KOReader starts. Add `--no-koreader` to skip the hook.
-
-5. Edit the settings, check them, and start:
-
-   ```
-   vi /var/local/netbird-kindle/netbird-kindle.conf
-   /var/local/netbird-kindle/nbk check
    /var/local/netbird-kindle/nbk start
    ```
 
-Once it is installed you can delete the `netbird-kindle` folder from the Kindle's storage.
+   Add `--no-koreader` to the first line to skip the KOReader hook.
+
+Once the link is up you can delete everything in the `netbird-kindle` folder on the Kindle's storage.
 
 ## Settings
 
@@ -90,6 +106,8 @@ HOSTS="10.20.30.40 library.example"
 
 Set `MANAGEMENT_URL` if you run your own NetBird server.
 
+Every line is `NAME="value"`. A settings file handed over through the Kindle's storage is read as text and never run: a line that is not one of the six settings in the example, or a value with anything but letters, digits, spaces and `. : ; / _ ~ -` in it, gets the whole file refused.
+
 ## Using it
 
 `nbk` is at `/var/local/netbird-kindle/nbk`. It is not on the PATH, so call it by its full name.
@@ -101,7 +119,10 @@ nbk restart   stop, then start
 nbk status    what is running, and whether the link answers
 nbk toggle    the home-screen item runs this
 nbk check     check the settings and change nothing
+nbk import    take in settings and a setup key waiting in the netbird-kindle folder
 ```
+
+`nbk start`, `restart` and `toggle` first take in anything waiting in the `netbird-kindle` folder, so `nbk import` by itself is rarely needed.
 
 `nbk start` waits until the first address in `FORWARDS` answers, through the redirect and through the mesh. If it does not within a minute, it says so and keeps the setup key, so a missing policy or a dead Wi-Fi connection does not look like success.
 
@@ -120,7 +141,7 @@ Nothing on the read-only system partition. While the link is up there are:
 
 `nbk stop` removes all of it except the two log files, which stay until the next start or a reboot so you can read what happened.
 
-The programs, your settings and the Kindle's NetBird identity live in `/var/local/netbird-kindle`, which is not the partition a computer sees over USB. Two small files do sit on that partition: the home-screen item (`documents/NetBird.sh`) and the KOReader hook (`koreader/patches/2-netbird-kindle.lua`). Each only calls `nbk` with a fixed argument.
+The programs, your settings and the Kindle's NetBird identity live in `/var/local/netbird-kindle`, which is not the partition a computer sees over USB. Two small files do sit on that partition: the home-screen item (`documents/NetBird.sh`) and the KOReader hook (`koreader/patches/2-netbird-kindle.lua`). Each only calls `nbk` with a fixed argument. The `netbird-kindle` folder with the example settings is there too, and so is KPM's copy of the package under `kmc/kpm/packages` if you installed that way.
 
 ## Security
 
@@ -132,7 +153,8 @@ Read this part before you put a mesh credential on a device that lives in a coat
 - **A jailbroken Kindle runs scripts from its USB storage as root.** That is true with or without this project, but once the Kindle is on your mesh it matters more: a computer you plug it into could plant a script that uses the link. Narrow access is the answer to that too.
 - **When the link is down, the redirect is gone.** A private address then means whatever machine has that address on the Wi-Fi you happen to be on. Use HTTPS and never click through a certificate warning.
 - The proxy and the forwarder listen on loopback only, a firewall rule drops anything from outside aimed at their ports, and the client is started with inbound connections blocked. Nothing on your mesh or the local network can connect to the Kindle through this.
-- The setup key is read from a file, never passed on a command line, and deleted once the link first answers.
+- The setup key is read from a file, never passed on a command line, and deleted once the link first answers. Until your first tap it sits in the `netbird-kindle` folder where a computer can read it, which is one more reason for a one-off key with a short expiry.
+- **Settings can be changed by whoever can write to the Kindle's storage.** That is what makes setup possible without a shell. A settings file from there is never run as code, but it can point the link at a different address or NetBird server. Your NetBird policy still decides what the Kindle may reach, so keep it narrow.
 
 ## Limits
 
@@ -140,26 +162,30 @@ Read this part before you put a mesh credential on a device that lives in a coat
 - No mesh DNS. Names are mapped by hand in the settings.
 - The link carries traffic only while the Kindle is awake, since a sleeping Kindle turns its Wi-Fi off.
 - NetBird takes tens of megabytes of memory on a device that has 512.
-- Installing needs a root shell. There is no in-app installer.
+- The settings are a text file you edit on a computer. There is no settings screen on the Kindle.
 
 ## Uninstall
 
-On the Kindle, as root:
+In the Kindle's search bar:
 
 ```
-sh /var/local/netbird-kindle/uninstall.sh
+;kpm uninstall netbird-kindle
 ```
 
-Then delete the Kindle's peer in your NetBird dashboard. If you no longer have the script, `nbk stop` followed by removing `/var/local/netbird-kindle`, `/mnt/us/documents/NetBird.sh` and `/mnt/us/koreader/patches/2-netbird-kindle.lua` does the same.
+If you installed without KPM, run `sh /var/local/netbird-kindle/uninstall.sh` as root instead. If you no longer have the script, `nbk stop` followed by removing `/var/local/netbird-kindle`, `/mnt/us/documents/NetBird.sh` and `/mnt/us/koreader/patches/2-netbird-kindle.lua` does the same.
+
+Either way, delete the Kindle's peer in your NetBird dashboard afterwards.
 
 ## Building from source
 
 You need Go, make, shellcheck, zip and shasum.
 
 ```
-make test     vet and test nblink, lint the scripts
-make dist     build dist/netbird-kindle.zip
+make test     vet and test nblink, lint and test the scripts
+make dist     build the zip, the KPM package (.kpkg) and its index (repo.json) in dist/
 ```
+
+To try a package on a Kindle before releasing it, `sh tools/kpm-pack.sh v9.9.9 file:///mnt/us/somewhere` writes an index that points at a folder on the Kindle. Copy the `.kpkg` and `repo.json` there and `kpm add-repo file:///mnt/us/somewhere/repo.json`.
 
 To move to another NetBird version, change the version and both checksums in `kindle/versions`. The checksums come from `netbird_<version>_checksums.txt` on NetBird's release page.
 

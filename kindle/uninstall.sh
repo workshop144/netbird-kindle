@@ -13,5 +13,8 @@ fi
 rm -f /mnt/us/documents/NetBird.sh
 rm -rf /mnt/us/documents/NetBird.sh.sdr
 rm -f /mnt/us/koreader/patches/2-netbird-kindle.lua
+# the handover folder goes too, unless something of yours is still in it
+rm -f /mnt/us/netbird-kindle/netbird-kindle.conf.example
+rmdir /mnt/us/netbird-kindle 2> /dev/null
 rm -rf "$DEST" /var/run/netbird-kindle
 echo "uninstall: removed. Delete this Kindle's peer in your NetBird dashboard."

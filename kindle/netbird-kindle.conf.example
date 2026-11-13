@@ -1,6 +1,11 @@
-# netbird-kindle settings. Lives in /var/local/netbird-kindle/netbird-kindle.conf.
-# This is a shell file read by root: keep it there, not on the USB-visible storage.
-# After editing, run `nbk check`.
+# netbird-kindle settings.
+#
+# Copy this file to netbird-kindle.conf, edit it, and leave it in the netbird-kindle folder on
+# the Kindle's storage. The next tap on "NetBird link" checks it, moves it to
+# /var/local/netbird-kindle (which a computer cannot see), and starts the link with it. A file
+# with a mistake in it is left where it is and nothing changes.
+#
+# Each line is NAME="value". Nothing else is accepted from this folder.
 
 # Your NetBird management URL. Leave empty for NetBird's hosted service.
 MANAGEMENT_URL=""

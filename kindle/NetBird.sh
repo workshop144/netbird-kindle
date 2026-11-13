@@ -4,6 +4,7 @@
 # Tap to bring the NetBird link up, tap again to take it down. Shows the result on screen.
 NBK=/var/local/netbird-kindle/nbk
 FBINK=/mnt/us/libkh/bin/fbink
+[ -x "$FBINK" ] || FBINK=/var/local/kmc/bin/fbink
 say() { [ -x "$FBINK" ] && "$FBINK" -q -pmh -y -4 "$1" >/dev/null 2>&1; }
 if [ ! -x "$NBK" ]; then say "NetBird is not installed"; exit 1; fi
 say "NetBird: working..."

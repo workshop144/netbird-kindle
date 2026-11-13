@@ -1,0 +1,10 @@
+{
+  "manifest_version": 2,
+  "id": "netbird-kindle",
+  "name": "NetBird link",
+  "author": "Workshop 144",
+  "description": "Reach your NetBird mesh from a Kindle that has no tunnel driver: a self-hosted library, an OPDS catalog, a sync server.",
+  "version": [@MAJOR@, @MINOR@, @PATCH@],
+  "dependencies": [],
+  "supported_platforms": ["kindlehf", "kindlepw2"]
+}
