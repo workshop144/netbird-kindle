@@ -128,6 +128,8 @@ nbk import    take in settings and a setup key waiting in the netbird-kindle fol
 
 The home-screen item runs `nbk toggle` and prints the result on the screen. It relies on the scriptlet support that current jailbreaks set up.
 
+Give it half a minute between taps. Each time a home-screen script runs, the Kindle re-indexes it, and a tap that lands while that is going on shows "Opening" and then does nothing. That is how the jailbreak's script launcher behaves ([sh_integration issue 4](https://github.com/KindleModding/sh_integration/issues/4)), not something this project can change.
+
 The link keeps running across sleep. After a short sleep it works again within seconds. After a long one NetBird can take a minute or two to reconnect, and `nbk restart` gets you there in about ten seconds. It does not survive a reboot: tap the home-screen item, or open KOReader if you installed the hook.
 
 ## What it changes on your Kindle
