@@ -21,10 +21,14 @@
 # Whatever started this script (KOReader's start hook, the home-screen launcher) hands down its
 # own open pipes and sockets. The long-running programs started below would hold them for as
 # long as they live, and the Kindle's app launcher waits on some of them. Close them first.
+# Not every shell can name a descriptor above 9 (the Kindle's can), so ask before trying.
+two_digits=no
+( eval 'exec 19>&-' ) 2>/dev/null && two_digits=yes
 for f in /proc/$$/fd/*; do
     n=${f##*/}
     case "$n" in *[!0-9]*) continue ;; esac
     [ "$n" -gt 2 ] || continue
+    [ "$n" -le 9 ] || [ "$two_digits" = yes ] || continue
     case "$(readlink "$f" 2>/dev/null)" in
         pipe:* | socket:* | anon_inode:* | /dev/* | /var/run/*) eval "exec $n>&-" 2>/dev/null ;;
     esac
