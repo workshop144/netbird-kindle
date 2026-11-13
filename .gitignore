@@ -1,0 +1,8 @@
+dist/
+kindle/nblink
+kindle/netbird
+*.tar.gz
+# never commit a device's secrets or settings
+setup-key
+netbird-kindle.conf
+state/

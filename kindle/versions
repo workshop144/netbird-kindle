@@ -1,0 +1,6 @@
+# The NetBird client this release installs, and the SHA-256 of each upstream archive
+# (from netbird_<version>_checksums.txt on the NetBird release page). The installer refuses
+# anything that does not match. To move to another NetBird version, change all three lines.
+NETBIRD_VERSION="0.82.1"
+NETBIRD_SHA256_armv6="cbd276fd389af7b9e8c8933ec81875a3cc89981d80cacb8d03cece001dd9c81f"
+NETBIRD_SHA256_arm64="8c6a4d4084e1746a3c9b86f0ce8be1ca05544ba08d7dbb78609c5c9d6b009e0e"

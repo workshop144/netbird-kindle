@@ -1,0 +1,22 @@
+# netbird-kindle settings. Lives in /var/local/netbird-kindle/netbird-kindle.conf.
+# This is a shell file read by root: keep it there, not on the USB-visible storage.
+# After editing, run `nbk check`.
+
+# Your NetBird management URL. Leave empty for NetBird's hosted service.
+MANAGEMENT_URL=""
+
+# The name this Kindle shows in the NetBird dashboard.
+PEER_NAME="kindle"
+
+# What the Kindle should reach through the mesh, space separated, as IP:PORT (IPv4).
+# NetBird in userspace mode has no network interface, so each of these is redirected to a
+# local forwarder. Only these exact addresses and ports go through the mesh.
+FORWARDS="10.20.30.40:443"
+
+# Names that should resolve to those addresses while the link is up, separated by ';',
+# each as "IP name [name ...]". Userspace mode has no mesh DNS. Leave empty for none.
+HOSTS="10.20.30.40 library.example"
+
+# Local ports (rarely need changing).
+SOCKS_PORT=1080
+FIRST_LOCAL_PORT=14431
