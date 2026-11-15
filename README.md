@@ -130,7 +130,31 @@ The home-screen item runs `nbk toggle` and prints the result on the screen. It r
 
 Give it half a minute between taps. Each time a home-screen script runs, the Kindle re-indexes it, and a tap that lands while that is going on shows "Opening" and then does nothing. That is how the jailbreak's script launcher behaves ([sh_integration issue 4](https://github.com/KindleModding/sh_integration/issues/4)), not something this project can change.
 
-The link keeps running across sleep. After a short sleep it works again within seconds. After a long one NetBird can take a minute or two to reconnect, and `nbk restart` gets you there in about ten seconds. It does not survive a reboot: tap the home-screen item, or open KOReader if you installed the hook.
+The link keeps running across sleep. After a short sleep it works again within seconds. After a long one NetBird can take a minute or two to reconnect, and `nbk restart` gets you there in about ten seconds. It does not survive a reboot: tap the home-screen item, or open KOReader if you installed the hook. To have it come up by itself, see the next section.
+
+### Starting at boot
+
+The KindleModding jailbreak has one boot hook. Its boot job (`/etc/upstart/kmc.conf`) looks for `emergency.sh` at the top level of the Kindle's storage and, if it is there, runs it as root on every boot once the Kindle's own software is up. This project does not install that file, but you can. Save this as `emergency.sh`, plug the Kindle in, and copy it to the top level of its storage:
+
+```sh
+#!/bin/sh
+# Start the NetBird link when the Kindle boots.
+if [ "$1" != run ]; then
+    # The boot job waits for this script, so hand the work to a detached copy and return.
+    setsid /bin/sh "$0" run < /dev/null > /dev/null 2>&1 &
+    exit 0
+fi
+sleep 30 # let the boot finish and Wi-Fi come up
+/var/local/netbird-kindle/nbk start
+```
+
+Three things to know before you do:
+
+- The file is meant for rescue scripts, which is why it is called that. There is one slot. If you ever need it for a rescue, your rescue script replaces this one, and this one has to be put back afterwards.
+- It sits on the storage a computer can see and runs as root on every boot. That is no worse than the home-screen item, which is a script in the same place, but it is one more of them.
+- If Wi-Fi is not up after the 30 seconds, `nbk start` says the address does not answer yet and leaves the link running. It connects when Wi-Fi does.
+
+To stop it, delete `emergency.sh`. On the Oasis 3 the link was up within five seconds of the wait ending, with nothing opened or tapped.
 
 ## What it changes on your Kindle
 
